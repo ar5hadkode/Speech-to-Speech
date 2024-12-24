@@ -24,7 +24,7 @@ pip install -r requirements.txt
 
 ### 3. Setup Groq API Key
 Replace the `api_key` variable in the Flask backend (`app.py`) with your Groq API key:
-In this case my API key is available so no need to change.
+ In this case my API key is available so no need to change.
 ```python
 api_key = "your_groq_api_key"
 ```
@@ -37,7 +37,7 @@ python app.py
 By default, the Flask server will run on `http://localhost:5000`.
 
 ### 5. Open the Web Interface
-Open the `index.html` file in your browser by double click, or host it using a simple HTTP server for better performance:
+Open the `voice_bot.html` file in your browser by double click, or host it using a simple HTTP server for better performance:
 ```bash
 python -m http.server 8000
 ```
