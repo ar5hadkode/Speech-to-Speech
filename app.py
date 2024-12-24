@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 CORS(app)
 
-api_key = "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" 
+api_key = "" 
 client = Groq(api_key=api_key)
 
 AUDIO_DIR = "static/audio"
