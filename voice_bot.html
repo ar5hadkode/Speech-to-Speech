@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
+  <title>Speech-to-Chat Assistant</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+    #status {
+      font-size: 16px;
+      font-weight: bold;
+      color: #4caf50;
+    }
+    #container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+    }
+    #conversation {
+      margin-top: 20px;
+    }
+    .message {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    .user-message {
+      background-color: #e3f2fd;
+      color: #007bff;
+      text-align: left;
+    }
+    .bot-message {
+      background-color: #ffe0b2;
+      color: #ff5722;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <p id="status">Not Connected</p>
+    <div id="conversation">
+      <p class="divider">Conversation:</p>
+    </div>
+  </div>
+
+  <script>
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      console.log({ stream });
+      if (!MediaRecorder.isTypeSupported("audio/webm"))
+        return alert("Browser not supported");
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: "audio/webm",
+      });
+
+      const socket = new WebSocket("wss://api.deepgram.com/v1/listen", [
+        "token",
+        "f17e7f09e6b879589ac9b784c77019fdd1b11fdf",
+      ]);
+
+      let transcriptBuffer = ""; 
+      let pauseTimer = null; 
+      let currentAudio = null;          // Track current Audio ...................
+      const conversationDiv = document.querySelector("#conversation");
+
+      socket.onopen = () => {
+        document.querySelector("#status").textContent = "Connected";
+        console.log({ event: "onopen" });
+        mediaRecorder.addEventListener("dataavailable", async (event) => {
+          if (event.data.size > 0 && socket.readyState == 1) {
+            socket.send(event.data);
+          }
+        });
+        mediaRecorder.start(1000);
+      };
+
+      socket.onmessage = (message) => {
+        const received = JSON.parse(message.data);
+        const transcript = received.channel.alternatives[0].transcript;
+        if (transcript && received.is_final) {
+          console.log(transcript);
+          transcriptBuffer += transcript + " ";
+
+          const userMessage = document.createElement("p");
+          userMessage.className = "message user-message";
+          userMessage.textContent = `You: ${transcript}`;
+          conversationDiv.appendChild(userMessage);
+
+          conversationDiv.scrollTop = conversationDiv.scrollHeight;
+
+          clearTimeout(pauseTimer);
+          pauseTimer = setTimeout(() => {
+            sendToGroqLLM(transcriptBuffer);
+            transcriptBuffer = ""; 
+          }, 2000);
+        }
+      };
+
+      socket.onclose = () => {
+        console.log({ event: "onclose" });
+      };
+
+      socket.onerror = (error) => {
+        console.log({ event: "onerror", error });
+      };
+
+      async function sendToGroqLLM(transcript) {
+        console.log("Sending to Python backend:", transcript);
+        try {
+          const response = await fetch("http://localhost:5000/process_transcript", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              transcript: transcript,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log("Response from Flask backend:", data);
+
+            // Display the bot's response
+            const botMessage = document.createElement("p");
+            botMessage.className = "message bot-message";
+            botMessage.textContent = `Assistant: ${data.generated_text}`;
+            conversationDiv.appendChild(botMessage);
+
+            conversationDiv.scrollTop = conversationDiv.scrollHeight;
+
+            if (currentAudio) {
+              currentAudio.pause();
+              currentAudio = null; 
+            }
+
+            const audioUrl = `http://localhost:5000/audio/${data.audio_file}?t=${new Date().getTime()}`;
+            currentAudio = new Audio(audioUrl);
+            currentAudio.play();
+          } else {
+            console.error("Error: ", response.statusText);
+          }
+        } catch (error) {
+          console.error("Error sending to Groq API via Python:", error);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
